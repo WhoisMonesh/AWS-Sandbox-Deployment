@@ -1,0 +1,32 @@
+# Terraform / AWS state / secrets
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+.terraform.lock.hf
+crash.log
+*.backup
+
+# Local credential / env artifacts
+.env
+.env.*
+.aws/
+*.tfvars
+terraform.rc
+.terraformrc
+
+# SSH keys / bastion key material (never commit private keys)
+ssh/
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+
+# Logs
+*.log
