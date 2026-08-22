@@ -296,11 +296,26 @@ resource "aws_launch_template" "node" {
     }
   }
 
-  # cloud-init only treats user_data as a script when it starts with "#!".
+  # AL2023-based EKS AMIs removed bootstrap.sh; nodes are now initialized by
+  # nodeadm. Write a NodeConfig and run `nodeadm init` with the cluster details.
   user_data = base64encode(<<-EOT
     #!/bin/bash
     set -o xtrace
-    /etc/eks/bootstrap.sh ${var.cluster_name}
+    cat > /etc/eks/bootstrap.json <<'BOOTSTRAP'
+    {
+      "apiVersion": "node.eks.aws/v1alpha1",
+      "kind": "NodeConfig",
+      "spec": {
+        "cluster": {
+          "name": "${aws_eks_cluster.this.name}",
+          "apiServerEndpoint": "${aws_eks_cluster.this.endpoint}",
+          "certificateAuthority": "${aws_eks_cluster.this.certificate_authority[0].data}",
+          "cidr": "${aws_eks_cluster.this.kubernetes_network_config[0].service_ipv4_cidr}"
+        }
+      }
+    }
+    BOOTSTRAP
+    /usr/bin/nodeadm init -c file:///etc/eks/bootstrap.json
   EOT
   )
 }
@@ -336,7 +351,7 @@ resource "aws_cloudformation_stack" "node" {
           AutoScalingRollingUpdate = {
             MaxBatchSize            = 1
             MinInstancesInService   = var.node_desired
-            PauseTime               = "PT5M"
+              PauseTime               = "PT2M"
           }
         }
       }
