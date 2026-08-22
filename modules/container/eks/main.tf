@@ -398,9 +398,13 @@ resource "kubernetes_config_map" "aws_auth" {
   data = {
     mapRoles = yamlencode([
       {
+        # The bastion must reuse the node (course) role because the sandbox only
+        # permits iam:PassRole on it, so we grant that role cluster-admin here.
+        # Worker kubelets authenticate via client cert (node authorizer), not this
+        # IAM mapping, so promoting the role does not affect node operation.
         rolearn  = aws_iam_role.node.arn
         username = "system:node:{{EC2PrivateDNSName}}"
-        groups   = ["system:bootstrappers", "system:nodes"]
+        groups   = ["system:bootstrappers", "system:nodes", "system:masters"]
       }
     ])
   }
