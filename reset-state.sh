@@ -1,34 +1,57 @@
 #!/usr/bin/env bash
 #
-# reset-state.sh — Wipe local Terraform state for every service.
+# reset-state.sh — Wipe ALL local Terraform artifacts for every service:
+# state files, provider lock files, .terraform caches, plan and crash logs.
 #
 # WHY: KodeKloud gives you a FRESH AWS account each lab session. The local
 # *.tfstate files (git-ignored, so they persist on disk between sessions)
-# still describe resources in the PREVIOUS account. When you run terraform in
-# the new account it tries to refresh those old resources, producing errors
-# like "AccountIDs mismatch" (ECS) or cross-account AccessDenied (S3).
+# still describe resources in the PREVIOUS account, and .terraform/ caches +
+# lock files go stale too. Drop them all and let terraform treat everything
+# as brand new in the current account (init re-downloads providers).
 #
-# The previous account is gone, so those resources can't be destroyed — just
-# drop the local state and let terraform treat everything as brand new in the
-# current account.
-#
-# USAGE: ./reset-state.sh   (then: ./tf.sh group-core apply)
+# USAGE: ./reset-state.sh [-y]    (-y skips the confirmation prompt)
 #
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SERVICES="$ROOT/services"
 
-echo "Wiping local Terraform state under $ROOT/services ..."
-count=0
-while IFS= read -r -d '' f; do
-  rm -f "$f"
-  echo "  removed $f"
-  count=$((count + 1))
-done < <(find "$ROOT/services" -maxdepth 2 \( -name 'terraform.tfstate' -o -name 'terraform.tfstate.backup' \) -print0)
+ASSUME_YES=0
+case "${1:-}" in
+  -y|--yes) ASSUME_YES=1 ;;
+  "") ;;
+  *) echo "Usage: $0 [-y]"; exit 1 ;;
+esac
 
-if [ "$count" -eq 0 ]; then
-  echo "  (nothing to remove — state already clean)"
+echo "This will DELETE under $SERVICES :"
+echo "  - .terraform/                 (provider/module caches)"
+echo "  - .terraform.lock.hcl         (provider lock files)"
+echo "  - terraform.tfstate(.backup)  (local state)"
+echo "  - terraform.tfstate.lock.info, *.tfplan, crash.log*"
+echo
+
+if (( ! ASSUME_YES )); then
+  read -r -p "Proceed? [y/N]: " ans
+  [[ "$ans" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 1; }
 fi
 
+count=0
+while IFS= read -r -d '' p; do
+  rm -rf "$p"
+  echo "  removed $p"
+  count=$((count + 1))
+done < <(
+  find "$SERVICES" -maxdepth 2 \( \
+      -name '.terraform' -o \
+      -name '.terraform.lock.hcl' -o \
+      -name 'terraform.tfstate' -o \
+      -name 'terraform.tfstate.backup' -o \
+      -name 'terraform.tfstate.lock.info' -o \
+      -name 'crash.log*' -o \
+      -name '*.tfplan' \) -print0 2>/dev/null
+)
+
+(( count )) || echo "  Nothing to remove — already clean."
+
 echo
-echo "Done. Next: ./tf.sh group-core apply   (or ./tf.sh <service> apply)"
+echo "Done. Next: ./tf.sh <service> plan   (init runs automatically)"
