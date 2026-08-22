@@ -87,4 +87,9 @@ function Deploy-Menu {
   }
 }
 
+if ($args.Count -ge 1) {
+  & "$Root\tf.ps1" @args
+  exit $LASTEXITCODE
+}
+
 Deploy-Menu

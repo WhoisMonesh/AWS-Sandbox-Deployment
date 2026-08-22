@@ -42,11 +42,13 @@ echo
 
 # The KodeKloud playground issues a fresh account/URL/user every session, so we
 # always prompt (no stale default) and re-ask until a value is provided.
-while [[ -z "${SIGNIN_URL:-}" ]]; do
+SIGNIN_URL="${KK_SIGNIN_URL:-}"
+while [[ -z "${SIGNIN_URL}" ]]; do
   read -r -p "AWS account sign-in URL: " SIGNIN_URL
 done
 
-while [[ -z "${IAM_USER:-}" ]]; do
+IAM_USER="${KK_IAM_USER:-}"
+while [[ -z "${IAM_USER}" ]]; do
   read -r -p "IAM username: " IAM_USER
 done
 
@@ -57,11 +59,20 @@ if [[ -z "$ACCOUNT_ID" || "$ACCOUNT_ID" == "$SIGNIN_URL" ]]; then
 fi
 
 # Password: only consumed by the browser `aws login` flow; not stored.
-read -r -s -p "Console password (used only for the browser login, never stored): " CONSOLE_PASS
-echo
+ASKPASS=1
+if [[ -n "${KK_ACCESS_KEY_ID:-}" && -n "${KK_SECRET_ACCESS_KEY:-}" ]]; then ASKPASS=0; fi
+if [[ "${KK_AUTH:-}" == "1" ]]; then ASKPASS=1; fi
+if [[ "$ASKPASS" == "1" ]]; then
+  read -r -s -p "Console password (used only for the browser login, never stored): " CONSOLE_PASS
+  echo
+fi
 
-read -r -p "Region [us-east-1]: " REGION
-REGION="${REGION:-us-east-1}"
+if [[ -n "${KK_REGION:-}" ]]; then
+  REGION="$KK_REGION"
+else
+  read -r -p "Region [us-east-1]: " REGION
+  REGION="${REGION:-us-east-1}"
+fi
 
 IAM_ARN="arn:aws:iam::${ACCOUNT_ID}:user/${IAM_USER}"
 
@@ -106,21 +117,24 @@ try_aws_login() {
 # --- Attempt 2: long-lived access keys ----------------------------------
 use_access_keys() {
   warn "Falling back to long-lived IAM access keys."
-  echo "  1) Open the IAM console 'Security credentials' page for this user."
-  echo "  2) Under 'Access keys' choose 'Create access key' (use case: CLI)."
-  echo "  3) Copy the Access key ID and Secret access key."
-  echo
-  CONSOLE_CREDS_URL="https://${REGION}.console.aws.amazon.com/iam/home?region=${REGION}#/users/${IAM_USER}?section=security_credentials"
-  if command -v open >/dev/null 2>&1; then
-    open "$CONSOLE_CREDS_URL" >/dev/null 2>&1 || true
-  elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$CONSOLE_CREDS_URL" >/dev/null 2>&1 || true
+  AK="${KK_ACCESS_KEY_ID:-}"
+  SK="${KK_SECRET_ACCESS_KEY:-}"
+  if [[ -z "$AK" || -z "$SK" ]]; then
+    echo "  1) Open the IAM console 'Security credentials' page for this user."
+    echo "  2) Under 'Access keys' choose 'Create access key' (use case: CLI)."
+    echo "  3) Copy the Access key ID and Secret access key."
+    echo
+    CONSOLE_CREDS_URL="https://${REGION}.console.aws.amazon.com/iam/home?region=${REGION}#/users/${IAM_USER}?section=security_credentials"
+    if command -v open >/dev/null 2>&1; then
+      open "$CONSOLE_CREDS_URL" >/dev/null 2>&1 || true
+    elif command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "$CONSOLE_CREDS_URL" >/dev/null 2>&1 || true
+    fi
+    echo "    (Opening: $CONSOLE_CREDS_URL)"
+    echo
+    if [[ -z "$AK" ]]; then read -r -p "Access Key ID: " AK; fi
+    if [[ -z "$SK" ]]; then read -r -s -p "Secret Access Key: " SK; echo; fi
   fi
-  echo "    (Opening: $CONSOLE_CREDS_URL)"
-  echo
-  read -r -p "Access Key ID: " AK
-  read -r -s -p "Secret Access Key: " SK
-  echo
   "$AWS_CLI" configure unset profile."$PROFILE".credential_process 2>/dev/null || true
   "$AWS_CLI" configure set profile."$PROFILE".region "$REGION"
   "$AWS_CLI" configure set profile."$PROFILE".aws_access_key_id "$AK"
@@ -142,11 +156,15 @@ clear_old_creds() {
 }
 clear_old_creds
 
-echo "How would you like to authenticate?"
-echo "  1) aws login (browser)  — requires IAM perm SignInLocalDevelopmentAccess (usually ABSENT on KodeKloud lab users; gives a 400)"
-echo "  2) Long-lived IAM access keys  — recommended for the KodeKloud playground"
-read -r -p "Choice [2]: " AUTH
-AUTH="${AUTH:-2}"
+if [[ -n "${KK_AUTH:-}" ]]; then
+  AUTH="$KK_AUTH"
+else
+  echo "How would you like to authenticate?"
+  echo "  1) aws login (browser)  — requires IAM perm SignInLocalDevelopmentAccess (usually ABSENT on KodeKloud lab users; gives a 400)"
+  echo "  2) Long-lived IAM access keys  — recommended for the KodeKloud playground"
+  read -r -p "Choice [2]: " AUTH
+  AUTH="${AUTH:-2}"
+fi
 
 if [ "$AUTH" = "1" ]; then
   if try_aws_login; then

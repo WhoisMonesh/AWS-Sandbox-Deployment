@@ -36,8 +36,20 @@ if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
 
 # The KodeKloud playground issues a fresh account/URL/user every session, so we
 # always prompt (no stale default) and re-ask until a value is provided.
-do { $signinUrl = Read-Host "AWS account sign-in URL" } while ([string]::IsNullOrWhiteSpace($signinUrl))
-do { $iamUser    = Read-Host "IAM username" }        while ([string]::IsNullOrWhiteSpace($iamUser))
+$signinUrl = $env:KK_SIGNIN_URL
+$tries = 0
+while ([string]::IsNullOrWhiteSpace($signinUrl)) {
+  $tries++
+  if ($tries -gt 3) { Warn "No input detected. For non-interactive use set KK_SIGNIN_URL / KK_IAM_USER / KK_ACCESS_KEY_ID / KK_SECRET_ACCESS_KEY."; exit 1 }
+  $signinUrl = Read-Host "AWS account sign-in URL"
+}
+$iamUser = $env:KK_IAM_USER
+$tries = 0
+while ([string]::IsNullOrWhiteSpace($iamUser)) {
+  $tries++
+  if ($tries -gt 3) { Warn "No input detected. For non-interactive use set KK_SIGNIN_URL / KK_IAM_USER / KK_ACCESS_KEY_ID / KK_SECRET_ACCESS_KEY."; exit 1 }
+  $iamUser = Read-Host "IAM username"
+}
 
 if ($signinUrl -match "https?://(\d{12})\.signin\.aws\.amazon\.com") {
   $accountId = $Matches[1]
@@ -45,11 +57,18 @@ if ($signinUrl -match "https?://(\d{12})\.signin\.aws\.amazon\.com") {
   $accountId = Read-Host "Could not parse account id from URL. Enter it manually"
 }
 
-$securePass = Read-Host "Console password (used only for the browser login, never stored)" -AsSecureString
+$askPass = $true
+if ($env:KK_ACCESS_KEY_ID -and $env:KK_SECRET_ACCESS_KEY) { $askPass = $false }
+if ($env:KK_AUTH -eq "1") { $askPass = $true }
+$securePass = $null
+if ($askPass) {
+  $securePass = Read-Host "Console password (used only for the browser login, never stored)" -AsSecureString
+}
 # password is intentionally not persisted anywhere
 
 $defaultRegion = "us-east-1"
-$region = Read-Host "Region [$defaultRegion]"
+$region = $env:KK_REGION
+if ([string]::IsNullOrWhiteSpace($region)) { $region = Read-Host "Region [$defaultRegion]" }
 if ($region -eq "") { $region = $defaultRegion }
 
 $iamArn = "arn:aws:iam::${accountId}:user/${iamUser}"
@@ -73,14 +92,18 @@ function Try-AwsLogin {
 # ---------------- Attempt 2: access keys ----------------
 function Use-AccessKeys {
   Warn "Falling back to long-lived IAM access keys."
-  Write-Host "  1) Open the IAM console 'Security credentials' page for this user."
-  Write-Host "  2) Under 'Access keys' choose 'Create access key' (use case: CLI)."
-  Write-Host "  3) Copy the Access key ID and Secret access key."
-  $consoleUrl = "https://${region}.console.aws.amazon.com/iam/home?region=${region}#/users/${iamUser}?section=security_credentials"
-  Write-Host "     $consoleUrl"
-  Start-Process $consoleUrl
-  $ak = Read-Host "Access Key ID"
-  $sk = Read-Host "Secret Access Key"
+  $ak = $env:KK_ACCESS_KEY_ID
+  $sk = $env:KK_SECRET_ACCESS_KEY
+  if (-not $ak -or -not $sk) {
+    Write-Host "  1) Open the IAM console 'Security credentials' page for this user."
+    Write-Host "  2) Under 'Access keys' choose 'Create access key' (use case: CLI)."
+    Write-Host "  3) Copy the Access key ID and Secret access key."
+    $consoleUrl = "https://${region}.console.aws.amazon.com/iam/home?region=${region}#/users/${iamUser}?section=security_credentials"
+    Write-Host "     $consoleUrl"
+    Start-Process $consoleUrl
+    if (-not $ak) { $ak = Read-Host "Access Key ID" }
+    if (-not $sk) { $sk = Read-Host "Secret Access Key" }
+  }
   Invoke-Aws configure set "profile.$PROFILE.region" $region
   Invoke-Aws configure set "profile.$PROFILE.aws_access_key_id" $ak
   Invoke-Aws configure set "profile.$PROFILE.aws_secret_access_key" $sk
@@ -117,11 +140,15 @@ function Clear-OldCreds {
 }
 Clear-OldCreds
 
-Write-Host "How would you like to authenticate?"
-Write-Host "  1) aws login (browser)  - requires IAM perm SignInLocalDevelopmentAccess (usually ABSENT on KodeKloud lab users; gives a 400)"
-Write-Host "  2) Long-lived IAM access keys  - recommended for the KodeKloud playground"
-$auth = Read-Host "Choice [2]"
+$auth = $env:KK_AUTH
+if (-not $auth) {
+  Write-Host "How would you like to authenticate?"
+  Write-Host "  1) aws login (browser)  - requires IAM perm SignInLocalDevelopmentAccess (usually ABSENT on KodeKloud lab users; gives a 400)"
+  Write-Host "  2) Long-lived IAM access keys  - recommended for the KodeKloud playground"
+  $auth = Read-Host "Choice [2]"
+}
 if ($auth -eq "") { $auth = "2" }
+if ($auth -ne "1") { $auth = "2" }
 
 if ($auth -eq "1") {
   if (-not (Try-AwsLogin)) { Use-AccessKeys }

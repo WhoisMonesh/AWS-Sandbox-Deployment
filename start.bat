@@ -1,6 +1,8 @@
 @echo off
+title AWS Sandbox Deployment - Windows cmd
 setlocal EnableExtensions
 cd /d "%~dp0"
+set "AUTO_ARGS=%*"
 
 call :CheckTool aws Amazon.AWSCLI
 call :CheckTool terraform HashiCorp.Terraform
@@ -16,6 +18,9 @@ if exist "%~dp0setup-creds.bat" (
 ) else (
     echo !!   setup-creds.bat not found; run it manually.
 )
+
+if defined AUTO_ARGS call "%~dp0tf.bat" %AUTO_ARGS%
+if defined AUTO_ARGS exit /b %errorlevel%
 
 :menu
 echo.
@@ -35,6 +40,7 @@ goto menu
 
 :bye
 echo Bye.
+pause
 exit /b 0
 
 :CheckTool

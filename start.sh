@@ -49,6 +49,15 @@ install_rhel() {
 }
 
 install_linux() {
+  local missing=0
+  local c
+  for c in aws terraform jq git unzip; do
+    command -v "$c" >/dev/null 2>&1 || missing=1
+  done
+  if [[ "$missing" -eq 0 ]]; then
+    info "All prerequisites already installed."
+    return 0
+  fi
   if command -v apt-get >/dev/null 2>&1; then
     info "Detected Debian/Ubuntu."
     sudo apt-get update -y
@@ -111,6 +120,11 @@ if [[ ! -f setup-creds.sh ]]; then
 else
   info "Running interactive credential setup (kk-playground profile)..."
   ./setup-creds.sh
+fi
+
+if [[ $# -gt 0 ]]; then
+  ./tf.sh "$@" || exit $?
+  exit 0
 fi
 
 # ---------------- Deploy menu ----------------

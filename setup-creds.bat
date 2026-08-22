@@ -12,15 +12,33 @@ where aws >nul 2>nul || (
 echo KodeKloud AWS Playground - credential setup
 echo.
 
+set "SIGNIN_URL=%KK_SIGNIN_URL%"
+set /a ASK_TRIES=0
 :ask_url
-set "SIGNIN_URL="
+if defined SIGNIN_URL goto got_url
 set /p "SIGNIN_URL=AWS account sign-in URL: "
-if not defined SIGNIN_URL goto ask_url
+if defined SIGNIN_URL goto got_url
+set /a ASK_TRIES+=1
+if %ASK_TRIES% GEQ 3 (
+    echo !!  No input detected. For non-interactive use set KK_SIGNIN_URL / KK_IAM_USER / KK_ACCESS_KEY_ID / KK_SECRET_ACCESS_KEY.
+    exit /b 1
+)
+goto ask_url
+:got_url
 
+set "IAM_USER=%KK_IAM_USER%"
+set /a ASK_TRIES=0
 :ask_user
-set "IAM_USER="
+if defined IAM_USER goto got_user
 set /p "IAM_USER=IAM username: "
-if not defined IAM_USER goto ask_user
+if defined IAM_USER goto got_user
+set /a ASK_TRIES+=1
+if %ASK_TRIES% GEQ 3 (
+    echo !!  No input detected. For non-interactive use set KK_SIGNIN_URL / KK_IAM_USER / KK_ACCESS_KEY_ID / KK_SECRET_ACCESS_KEY.
+    exit /b 1
+)
+goto ask_user
+:got_user
 
 set "ACCOUNT_ID="
 set "URLTMP=%SIGNIN_URL:http://=%"
@@ -29,11 +47,14 @@ for /f "tokens=1 delims=." %%a in ("%URLTMP%") do set "CANDIDATE=%%a"
 if defined CANDIDATE echo %CANDIDATE%| findstr /r "^[0-9][0-9]*$" >nul && set "ACCOUNT_ID=%CANDIDATE%"
 if not defined ACCOUNT_ID set /p "ACCOUNT_ID=Could not parse account id from URL. Enter it manually: "
 
-set "CONSOLE_PASS="
-set /p "CONSOLE_PASS=Console password (visible in cmd; used only for browser login, never stored): "
+set "ASKPASS=1"
+if defined KK_ACCESS_KEY_ID if defined KK_SECRET_ACCESS_KEY set "ASKPASS=0"
+if /i "%KK_AUTH%"=="1" set "ASKPASS=1"
+if "%ASKPASS%"=="1" set /p "CONSOLE_PASS=Console password (visible in cmd; used only for browser login, never stored): "
 
-set "REGION=us-east-1"
-set /p "REGION=Region [us-east-1]: "
+set "REGION=%KK_REGION%"
+if not defined REGION set "REGION=us-east-1"
+if not defined KK_REGION set /p "REGION=Region [%REGION%]: "
 
 echo.
 echo ==^> Account ID : %ACCOUNT_ID%
@@ -43,11 +64,17 @@ echo.
 
 call :ClearOldCreds
 
-echo How would you like to authenticate?
-echo   1) aws login (browser)  - requires IAM perm SignInLocalDevelopmentAccess (usually ABSENT on KodeKloud lab users)
-echo   2) Long-lived IAM access keys  - recommended for the KodeKloud playground
-set "AUTH=2"
-set /p "AUTH=Choice [2]: "
+set "AUTH=%KK_AUTH%"
+if not defined AUTH set "AUTH=prompt"
+if /i "%AUTH%"=="prompt" (
+    echo How would you like to authenticate?
+    echo   1^) aws login ^(browser^)  - requires IAM perm SignInLocalDevelopmentAccess ^(usually ABSENT on KodeKloud lab users^)
+    echo   2^) Long-lived IAM access keys  - recommended for the KodeKloud playground
+    set /p "AUTH=Choice [2]: "
+    if not defined AUTH set "AUTH=prompt2"
+)
+if "%AUTH%"=="prompt2" set "AUTH=2"
+if /i not "%AUTH%"=="1" if /i not "%AUTH%"=="2" set "AUTH=2"
 
 if "%AUTH%"=="1" (
     call :TryAwsLogin
@@ -81,16 +108,18 @@ exit /b 0
 
 :UseAccessKeys
 echo !!  Falling back to long-lived IAM access keys.
+set "AK=%KK_ACCESS_KEY_ID%"
+set "SK=%KK_SECRET_ACCESS_KEY%"
+if defined AK if defined SK goto store_keys
 echo   1) Open the IAM console 'Security credentials' page for this user.
 echo   2) Under 'Access keys' choose 'Create access key' (use case: CLI).
 echo   3) Copy the Access key ID and Secret access key.
 set "CREDS_URL=https://%REGION%.console.aws.amazon.com/iam/home?region=%REGION%#/users/%IAM_USER%?section=security_credentials"
 echo     %CREDS_URL%
 start "" "%CREDS_URL%"
-set "AK="
-set "SK="
-set /p "AK=Access Key ID: "
-set /p "SK=Secret Access Key: "
+if not defined AK set /p "AK=Access Key ID: "
+if not defined SK set /p "SK=Secret Access Key: "
+:store_keys
 aws configure set profile.%PROFILE_NAME%.region %REGION%
 aws configure set profile.%PROFILE_NAME%.aws_access_key_id "%AK%"
 aws configure set profile.%PROFILE_NAME%.aws_secret_access_key "%SK%"
