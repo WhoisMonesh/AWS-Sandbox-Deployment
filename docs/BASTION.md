@@ -113,25 +113,19 @@ The KodeKloud Playground `AWS_EKSECSWithConditions` policy is restrictive:
   and grant those permissions to the node role another way (or run
   `update-kubeconfig` from a principal that already has them).
 
-- **Public endpoint only** — the cluster uses `endpoint_public_access = true`, so
-  the bastion reaches the API server over the internet (it sits in a public subnet
-  with an IGW route). No VPC peering / private-link is required for `kubectl`.
-
-- **SSH exposure** — the bastion security group allows TCP/22 from
-  `0.0.0.0/0` by default (`ssh_cidr` variable). For anything beyond the lab,
-  narrow this to your IP/CIDR.
-
 - **No managed node groups / Fargate** — `eks:CreateNodegroup` and the Fargate
   prerequisites (`iam:PassRole` to `eks-fargate-pods.amazonaws.com`,
   `iam:PutRolePolicy`/`AttachRolePolicy` for the Fargate pod execution role) are
-  not permitted. The EKS module deploys the **control plane only**. The bastion is
-  purely an admin jump host — you still cannot schedule workloads without node
-  capacity the lab policy forbids.
+  not permitted, so the EKS module deploys **self-managed worker nodes** (a
+  CloudFormation AutoScalingGroup + `bootstrap.sh`). The bastion is an admin jump
+  host that reuses the worker node IAM role.
 
 - **Public endpoint only** — the cluster uses `endpoint_public_access = true`, so
   the bastion reaches the API server over the internet (it sits in a public subnet
   with an IGW route). No VPC peering / private-link is required for `kubectl`.
 
-- **SSH exposure** — the bastion security group allows TCP/22 from
-  `0.0.0.0/0` by default (`ssh_cidr` variable). For anything beyond the lab,
-  narrow this to your IP/CIDR.
+- **SSH exposure** — by default the bastion only allows TCP/22 from **your
+  server's public IP** (auto-detected at plan time and applied as a `/32`). This
+  is the recommended setting (`restrict_ssh_to_operator_ip = true`). To use a
+  different source, set `restrict_ssh_to_operator_ip = false` and pass
+  `ssh_cidr = "1.2.3.4/32"` (e.g. a specific jump host / corporate IP).

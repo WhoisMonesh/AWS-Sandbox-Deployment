@@ -60,7 +60,16 @@ variable "public_subnet_name" {
 variable "ssh_cidr" {
   type        = string
   default     = "0.0.0.0/0"
-  description = "CIDR allowed to SSH to the bastion. Restrict this in production (e.g. your office IP)."
+  description = "CIDR allowed to SSH to the bastion (used when restrict_ssh_to_operator_ip = false)."
+}
+
+# Restrict SSH to the public IP of the machine running Terraform (your server),
+# detected at plan time. This is the recommended setting so the bastion is not
+# reachable from 0.0.0.0/0.
+variable "restrict_ssh_to_operator_ip" {
+  type        = bool
+  default     = true
+  description = "Lock SSH ingress to the operator's public IP (/32) instead of ssh_cidr."
 }
 
 variable "key_name" {

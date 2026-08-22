@@ -18,6 +18,11 @@ output "private_key_filename" {
   value       = local_file.private_key.filename
 }
 
+output "ssh_source_cidr" {
+  description = "CIDR(s) allowed to SSH to the bastion"
+  value       = local.ssh_source_cidrs
+}
+
 output "ssh_command" {
   description = "Ready-to-run SSH command"
   value       = "ssh -i ${local_file.private_key.filename} ec2-user@${aws_instance.bastion.public_ip}"

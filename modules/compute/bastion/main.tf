@@ -5,6 +5,8 @@ locals {
     region          = var.region
     cluster_name    = var.cluster_name
   }
+  # SSH source CIDR: operator's public IP when restricted, else the explicit cidr.
+  ssh_source_cidrs = var.restrict_ssh_to_operator_ip ? ["${chomp(data.http.my_ip[0].response_body)}/32"] : [var.ssh_cidr]
 }
 
 # ----- Look up the DEFAULT VPC / subnet the EKS node group lives in -----
@@ -85,17 +87,23 @@ resource "local_file" "private_key" {
 }
 
 # ----- Security group: SSH in, all egress out -----
+# Detect the operator's public IP so we can lock SSH down to your server.
+data "http" "my_ip" {
+  count = var.restrict_ssh_to_operator_ip ? 1 : 0
+  url   = "https://checkip.amazonaws.com/"
+}
+
 resource "aws_security_group" "bastion" {
   name        = "${var.name_prefix}-bastion-sg"
   description = "SSH access to the KodeKloud EKS bastion host"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description = "SSH"
+    description = "SSH from operator IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.ssh_cidr]
+    cidr_blocks = local.ssh_source_cidrs
   }
 
   egress {
