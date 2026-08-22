@@ -83,7 +83,7 @@ function Deploy-Menu {
     if ($tgt -eq "q" -or $tgt -eq "") { Write-Host "Bye."; break }
     $act = Read-Host "Action [plan|apply|destroy] (default plan)"
     if ($act -eq "") { $act = "plan" }
-    & "$Root\tf.ps1" $tgt $act
+    & "$Root\tf.ps1" "$tgt" "$act"
   }
 }
 

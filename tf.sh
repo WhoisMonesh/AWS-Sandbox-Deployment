@@ -3,16 +3,18 @@
 # tf.sh — Thin wrapper around Terraform for the KodeKloud AWS Playground lab.
 #
 # Usage:
-#   ./tf.sh <target> <action> [extra terraform args...]
+#   ./tf.sh "<target[,target2,...]>" <action> [extra terraform args...]
 #
 #   target : a service under services/  (e.g. ec2, s3, rds, eks)
 #            or a group  (group-core)  — see GROUPS below
+#            or a comma-separated list  (e.g. "eks,bastion")
 #            or  all      (NOT recommended; hits sandbox caps)
 #   action : plan | apply | destroy | init | validate | output   (default: plan)
 #
 # Examples:
 #   ./tf.sh ec2 plan
 #   ./tf.sh s3 apply
+#   ./tf.sh "eks,bastion" apply
 #   ./tf.sh group-core destroy
 #   ./tf.sh rds apply -auto-approve
 #
@@ -21,7 +23,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICES_DIR="$ROOT/services"
 
-GROUPS_group_core="iam-vpc ec2 s3 rds dynamodb eks ecr ecs bastion"
+GROUPS_group_core="iam-vpc ec2 s3 rds lambda dynamodb eks ecr ecs bastion"
 GROUPS_group_storage="s3 ebs efs"
 GROUPS_group_database="rds dynamodb redshift-serverless"
 GROUPS_group_network="apigateway route53 waf elb service-discovery internet-monitor"
@@ -32,43 +34,55 @@ GROUPS_group_devtools="codedeploy codeartifact"
 GROUPS_group_tools="autoscaling app-autoscaling secrets-manager cloudformation datasync directory-service evidently"
 
 usage() {
-  echo "Usage: $0 <service|group-core|group-storage|...|all> <plan|apply|destroy|init|validate> [args]"
+  echo 'Usage: '"$0"' "<svc[,svc2,...]|group-xxx|all>" <plan|apply|destroy|init|validate|output> [args]'
   exit 1
 }
 
 [[ $# -ge 1 ]] || usage
 TARGET="${1:-}"
 ACTION="${2:-plan}"
+case "$ACTION" in
+  plan|apply|destroy|init|validate|output) ;;
+  *) echo "Invalid action: $ACTION"
+     echo "Valid actions: plan apply destroy init validate output"
+     echo "Hint: quote comma lists, e.g. ./tf.sh \"eks,bastion\" plan"
+     exit 1 ;;
+esac
 shift 2 || true
 EXTRA=("$@")
 
-resolve_targets() {
-  local t="$1"
+TARGET_LIST="${TARGET//,/ }"
+TARGETS=()
+UNKNOWN=()
+for t in $TARGET_LIST; do
   if [[ "$t" == all ]]; then
-    find "$SERVICES_DIR" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort
-    return
+    mapfile -t arr < <(find "$SERVICES_DIR" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort)
+    TARGETS+=("${arr[@]}")
+    continue
   fi
-  local t_us="${t//-/_}"
-  local grp="GROUPS_${t_us}"
+  local_us="${t//-/_}"
+  grp="GROUPS_${local_us}"
   if [[ -n "${!grp:-}" ]]; then
-    echo "${!grp}"
-    return
+    read -ra arr <<< "${!grp}"
+    TARGETS+=("${arr[@]}")
+  elif [[ -d "$SERVICES_DIR/$t" ]]; then
+    TARGETS+=("$t")
+  else
+    UNKNOWN+=("$t")
   fi
-  if [[ -d "$SERVICES_DIR/$t" ]]; then
-    echo "$t"
-    return
-  fi
-  echo "UNKNOWN:$t"
-}
+done
+# dedupe, preserving order
+if (( ${#TARGETS[@]} )); then
+  mapfile -t TARGETS < <(printf '%s\n' "${TARGETS[@]}" | awk '!seen[$0]++')
+fi
 
-TARGETS=($(resolve_targets "$TARGET"))
-
-if [[ "${TARGETS[0]:-}" == UNKNOWN:* ]]; then
-  echo "Unknown target: $TARGET"
+if (( ${#UNKNOWN[@]} )); then
+  echo "Unknown target(s): ${UNKNOWN[*]}"
   echo "Available services:"; ls "$SERVICES_DIR" 2>/dev/null
   echo "Available groups: group-core group-storage group-database group-network group-integration group-security group-monitor group-devtools group-tools all"
   exit 1
 fi
+if (( ${#TARGETS[@]} == 0 )); then usage; fi
 
 run_in() {
   local dir="$1"

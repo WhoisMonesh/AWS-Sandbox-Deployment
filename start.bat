@@ -29,13 +29,13 @@ dir /b /ad "%~dp0services" 2>nul
 echo Groups: group-core group-storage group-database group-network group-integration group-security group-monitor group-devtools group-tools
 echo.
 set "TGT="
-set /p "TGT=Deploy target (e.g. s3, eks, group-core, 'all', q to quit): "
+set /p "TGT=Deploy target (e.g. s3, 'eks,bastion', group-core, 'all', q to quit): "
 if /i "%TGT%"=="q" goto bye
 if not defined TGT goto bye
 set "ACT=plan"
-set /p "ACT=Action [plan^|apply^|destroy] (default plan): "
+set /p "ACT=Action [plan|apply|destroy|init|validate|output] (default plan): "
 if not defined ACT set "ACT=plan"
-call "%~dp0tf.bat" %TGT% %ACT%
+call "%~dp0tf.bat" "%TGT%" "%ACT%"
 goto menu
 
 :bye
