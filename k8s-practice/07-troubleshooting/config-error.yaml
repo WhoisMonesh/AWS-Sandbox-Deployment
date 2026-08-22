@@ -1,0 +1,25 @@
+# INTENTIONALLY BROKEN — fix:
+#   references ConfigMap "missing-config" which does not exist ->
+#   CreateContainerConfigError. Create that ConfigMap, or point at a real one.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: broken-config
+  namespace: practice
+spec:
+  containers:
+    - name: app
+      image: nginx:1.27
+      env:
+        - name: SETTINGS
+          valueFrom:
+            configMapKeyRef:
+              name: missing-config
+              key: settings
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi

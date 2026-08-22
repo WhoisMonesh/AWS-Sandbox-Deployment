@@ -1,0 +1,38 @@
+# Taints & Toleration (conceptual + example).
+#
+# A taint on a node repels Pods unless they have a matching toleration.
+# EKS control-plane nodes are tainted; the example below shows the PATTERN.
+# To try it for real, taint a node first:
+#   kubectl taint nodes <node> dedicated=teamA:NoSchedule
+# then apply this file; remove with:
+#   kubectl taint nodes <node> dedicated=teamA:NoSchedule-
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tolerate-demo
+  namespace: practice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tolerate
+  template:
+    metadata:
+      labels:
+        app: tolerate
+    spec:
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "teamA"
+          effect: "NoSchedule"
+      containers:
+        - name: app
+          image: nginx:1.27
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

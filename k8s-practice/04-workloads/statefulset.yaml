@@ -1,0 +1,43 @@
+# StatefulSet: stable network identity + ordered, persistent storage per replica.
+# Each replica gets its own PVC from volumeClaimTemplates (EBS-backed).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+  namespace: practice
+spec:
+  serviceName: web
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+            - name: www
+              mountPath: /usr/share/nginx/html
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/nginx/html
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

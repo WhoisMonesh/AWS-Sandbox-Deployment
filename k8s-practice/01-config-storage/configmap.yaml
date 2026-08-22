@@ -1,0 +1,12 @@
+# ConfigMap: non-secret configuration consumed as env vars / files.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: practice
+data:
+  APP_ENV: "production"
+  LOG_LEVEL: "info"
+  # Multi-line values become files when mounted.
+  index.html: |
+    <h1>Hello from ConfigMap</h1>

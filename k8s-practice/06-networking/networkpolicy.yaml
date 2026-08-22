@@ -1,0 +1,45 @@
+# NetworkPolicy: deny all ingress to the `restricted` app except from `allowed`.
+# NOTE: requires NetworkPolicy support in the CNI. On EKS the AWS VPC CNI needs
+# the policy add-on enabled (or use Calico/Cilium). Without it, policies are
+# accepted but not enforced. Enable with:
+#   eksctl create addon --cluster kk-lab-eks --name vpc-cni   (then enable
+#   ENABLE_NETWORK_POLICY=true on the vpc-cni add-on)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: restricted
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: restricted
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: nginx:1.27
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: restricted
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]

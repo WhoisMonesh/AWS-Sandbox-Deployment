@@ -1,0 +1,7 @@
+# Namespace for practicing in isolation.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: practice
+  labels:
+    purpose: kubernetes-practice

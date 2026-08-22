@@ -117,3 +117,10 @@ ssh -i ssh/kk-lab-bastion.pem ec2-user@<BASTION_PUBLIC_IP>
 # on the bastion:
 connect-eks.sh        # aws eks update-kubeconfig + kubectl get nodes
 ```
+
+## 9. Kubernetes practice guide
+Step-by-step instructions for launching the EKS cluster (and what each Terraform
+resource does) are in **[`docs/create-eks-practice.md`](docs/create-eks-practice.md)**.
+Once the cluster is up, a library of practice manifests — Deployments, ConfigMaps,
+Secrets, probes, RBAC, NetworkPolicy, and intentionally-broken troubleshooting
+scenarios — lives in **[`k8s-practice/`](k8s-practice/)**.
