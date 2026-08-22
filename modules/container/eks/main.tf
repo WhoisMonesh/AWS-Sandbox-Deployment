@@ -31,7 +31,10 @@ locals {
   node_launch_template_name  = "${var.name_prefix}-eks-node-lt"
   node_stack_name            = "${var.name_prefix}-eks-node-stack"
   # EKS-optimized Amazon Linux 2023 AMI for the cluster minor version.
-  node_ami_ssm_param = "/aws/service/eks/optimized-ami/${var.cluster_version}/amazon-linux-2023/recommended/image_id"
+  # Note: the "recommended" alias requires the architecture dimension, e.g.
+  # .../amazon-linux-2023/x86_64/standard/recommended/image_id (the flat
+  # .../amazon-linux-2023/recommended/image_id path does NOT exist).
+  node_ami_ssm_param = "/aws/service/eks/optimized-ami/${var.cluster_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
 }
 
 # ---------------------------------------------------------------------------
