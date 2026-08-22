@@ -167,7 +167,7 @@ resource "aws_vpc_security_group_egress_rule" "node_egress_all" {
   description       = "Allow node egress to anywhere"
   security_group_id = aws_security_group.node.id
   cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol        = "-1"
+  ip_protocol       = "-1"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "node_from_control_plane" {
@@ -323,7 +323,7 @@ resource "aws_launch_template" "node" {
 # Wait for the launch template to settle before the ASG references it.
 resource "time_sleep" "node_lt" {
   count           = var.create_node_group ? 1 : 0
-  depends_on       = [aws_launch_template.node]
+  depends_on      = [aws_launch_template.node]
   create_duration = "30s"
 }
 
@@ -337,11 +337,11 @@ resource "aws_cloudformation_stack" "node" {
       NodeGroup = {
         Type = "AWS::AutoScaling::AutoScalingGroup"
         Properties = {
-          VPCZoneIdentifier        = local.eks_subnet_ids
-          MinSize                  = var.node_group_min_size
-          MaxSize                  = var.node_group_max_size
-          DesiredCapacity          = var.node_desired
-          HealthCheckType          = "EC2"
+          VPCZoneIdentifier = local.eks_subnet_ids
+          MinSize           = var.node_group_min_size
+          MaxSize           = var.node_group_max_size
+          DesiredCapacity   = var.node_desired
+          HealthCheckType   = "EC2"
           LaunchTemplate = {
             LaunchTemplateId = aws_launch_template.node[0].id
             Version          = aws_launch_template.node[0].latest_version
@@ -349,9 +349,9 @@ resource "aws_cloudformation_stack" "node" {
         }
         UpdatePolicy = {
           AutoScalingRollingUpdate = {
-            MaxBatchSize            = 1
-            MinInstancesInService   = var.node_desired
-              PauseTime               = "PT2M"
+            MaxBatchSize          = 1
+            MinInstancesInService = var.node_desired
+            PauseTime             = "PT2M"
           }
         }
       }

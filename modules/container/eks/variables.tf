@@ -57,7 +57,7 @@ variable "node_group_max_size" {
 
 # Set false to skip deploying worker nodes (control plane only).
 variable "create_node_group" {
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
   description = "Provision self-managed worker nodes (CFN ASG + bootstrap.sh). Mirrors the KodeKloud course workflow; avoids eks:CreateNodegroup which the lab blocks."
 }

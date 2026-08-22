@@ -28,15 +28,16 @@ resource "aws_s3_bucket_public_access_block" "this" {
 }
 
 resource "aws_s3_bucket_versioning" "this" {
-  count = var.enable_extras ? 1 : 0
+  count  = var.enable_extras ? 1 : 0
   bucket = aws_s3_bucket.this.id
   versioning_configuration {
     status = "Enabled"
   }
 }
 
+# Sandbox policy requires standard encryption on all S3 buckets, so this is
+# unconditional (not gated behind enable_extras like versioning/public-block).
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
-  count = var.enable_extras ? 1 : 0
   bucket = aws_s3_bucket.this.id
   rule {
     apply_server_side_encryption_by_default {
