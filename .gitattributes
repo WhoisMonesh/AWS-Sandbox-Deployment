@@ -1,0 +1,7 @@
+# Normalize line endings: bash scripts must stay LF, Windows scripts CRLF.
+* text=auto
+*.sh   text eol=lf
+*.bash text eol=lf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
