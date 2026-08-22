@@ -1,0 +1,29 @@
+# requests vs limits and QoS classes.
+#  - requests: scheduler guarantee (what the Pod needs to be placed)
+#  - limits:   hard cap (CPU throttled, memory OOMKilled if exceeded)
+# QoS: Guaranteed (req==lim for all), Burstable (req<lim), BestEffort (none).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resources-demo
+  namespace: practice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resources
+  template:
+    metadata:
+      labels:
+        app: resources
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

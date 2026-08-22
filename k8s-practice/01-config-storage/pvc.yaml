@@ -1,0 +1,14 @@
+# PersistentVolumeClaim using the cluster-default StorageClass (EKS: gp3).
+# Leave storageClassName unset to use the default; back this with EBS.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-pvc
+  namespace: practice
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName: gp3   # uncomment to pin a specific StorageClass

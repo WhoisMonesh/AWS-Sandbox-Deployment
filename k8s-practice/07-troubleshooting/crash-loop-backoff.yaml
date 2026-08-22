@@ -1,0 +1,29 @@
+# INTENTIONALLY BROKEN — fix:
+#   command exits immediately (exit 1) -> container crashes -> CrashLoopBackOff.
+#   Replace with a long-running process, e.g. command: ["sh","-c","sleep 3600"].
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken-crash
+  namespace: practice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: broken-crash
+  template:
+    metadata:
+      labels:
+        app: broken-crash
+    spec:
+      containers:
+        - name: broken
+          image: busybox:1.36
+          command: ["sh", "-c", "echo 'crashing...'; exit 1"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

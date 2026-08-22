@@ -1,0 +1,20 @@
+# INTENTIONALLY BROKEN — fix:
+#   allocates ~10GB but memory limit is 16Mi -> container OOMKilled.
+#   Raise the limit (e.g. memory: 256Mi) or drop the allocation.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: broken-oom
+  namespace: practice
+spec:
+  containers:
+    - name: hungry
+      image: python:3.12-slim
+      command: ["python3", "-c", "a=[]; [a.append(' '*10**7) for _ in range(1000)]"]
+      resources:
+        requests:
+          cpu: 50m
+          memory: 16Mi
+        limits:
+          cpu: 200m
+          memory: 16Mi

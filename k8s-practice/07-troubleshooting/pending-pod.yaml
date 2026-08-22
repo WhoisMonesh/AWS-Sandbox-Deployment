@@ -1,0 +1,19 @@
+# INTENTIONALLY BROKEN — fix:
+#   requests 9 CPU but no node has that much -> Pod stays Pending
+#   (FailedScheduling: insufficient cpu). Lower the request (e.g. cpu: 100m).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: broken-pending
+  namespace: practice
+spec:
+  containers:
+    - name: app
+      image: nginx:1.27
+      resources:
+        requests:
+          cpu: "9"
+          memory: 128Mi
+        limits:
+          cpu: "9"
+          memory: 256Mi

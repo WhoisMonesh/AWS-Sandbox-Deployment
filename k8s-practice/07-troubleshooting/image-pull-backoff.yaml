@@ -1,0 +1,27 @@
+# INTENTIONALLY BROKEN — fix:
+#   image "nginx:1.999" does not exist -> change to a real tag (e.g. nginx:1.27).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken-image
+  namespace: practice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: broken-image
+  template:
+    metadata:
+      labels:
+        app: broken-image
+    spec:
+      containers:
+        - name: broken
+          image: nginx:1.999
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
