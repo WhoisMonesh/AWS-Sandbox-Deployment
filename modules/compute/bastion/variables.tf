@@ -30,19 +30,29 @@ variable "kubectl_version" {
   description = "kubectl release to install on the bastion (match the EKS cluster minor version)."
 }
 
-# The THREE data sources below are looked up by the tags/names created by the
-# iam-vpc module. Deploy iam-vpc (or group-core) before this module.
+# The bastion reuses the worker node IAM role / instance profile created by the
+# eks module. The node role is mapped to system:nodes in the aws-auth ConfigMap,
+# so kubectl (get nodes, logs, exec) works from the bastion. The playground only
+# permits iam:PassRole on the course role, so we must reuse it (not a custom role).
+variable "node_instance_profile_name" {
+  type    = string
+  default = "kk-lab-eks-node-profile"
+}
+
+variable "node_role_name" {
+  type        = string
+  default     = "eksWorkerNodeRole"
+  description = "Worker node IAM role (created by the eks module) the bastion reuses."
+}
+
+# The VPC / subnet the eks module launched the node group into (default VPC). The
+# bastion lives in the same VPC so it can reach the cluster API + nodes.
 variable "vpc_name" {
   type    = string
   default = ""
 }
 
 variable "public_subnet_name" {
-  type    = string
-  default = ""
-}
-
-variable "lab_instance_profile_name" {
   type    = string
   default = ""
 }
@@ -65,10 +75,10 @@ variable "private_key_filename" {
   default = "ssh/kk-lab-bastion.pem"
 }
 
-# Attach a minimal EKS API policy (DescribeCluster / GetToken) to the lab role so
-# the bastion can run `aws eks update-kubeconfig` and the kubectl exec plugin.
-# Set false if the playground IAM policy blocks iam:PutRolePolicy on the lab role.
-variable "grant_eks_api_permissions" {
+# Attach eks:DescribeCluster / ListClusters / sts:GetCallerIdentity to the node
+# role so the bastion can run `aws eks update-kubeconfig`. Set false if the lab
+# IAM policy blocks iam:PutRolePolicy on the node (course) role.
+variable "attach_jump_policy" {
   type    = bool
   default = true
 }

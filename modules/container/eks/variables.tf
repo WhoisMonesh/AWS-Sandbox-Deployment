@@ -18,20 +18,8 @@ variable "cluster_version" {
   default = "1.36"
 }
 
-# IAM role (from the iam-vpc module) granted cluster-admin via an EKS access entry.
-variable "cluster_admin_role_name" {
-  type        = string
-  default     = "kk-lab-lab-role"
-  description = "Name of the IAM role to grant EKS cluster-admin access (created by the iam-vpc module)."
-}
-
-variable "create_access_entry" {
-  type        = bool
-  default     = true
-  description = "Create an EKS access entry + cluster-admin policy association for the lab role. Set false if the playground IAM policy blocks eks:CreateAccessEntry."
-}
-
-# Playground provides these roles; referenced by name.
+# The KodeKloud playground only permits iam:PassRole on the course roles, so the
+# cluster and (especially) the worker nodes must use these exact names.
 variable "cluster_role_name" {
   type    = string
   default = "eksClusterRole"
@@ -39,7 +27,7 @@ variable "cluster_role_name" {
 
 variable "node_role_name" {
   type    = string
-  default = "AmazonEKSNodeRole"
+  default = "eksWorkerNodeRole"
 }
 
 variable "node_instance_type" {
@@ -54,5 +42,22 @@ variable "node_instance_type" {
 
 variable "node_desired" {
   type    = number
+  default = 2
+}
+
+variable "node_group_min_size" {
+  type    = number
   default = 1
+}
+
+variable "node_group_max_size" {
+  type    = number
+  default = 3
+}
+
+# Set false to skip deploying worker nodes (control plane only).
+variable "create_node_group" {
+  type    = bool
+  default = true
+  description = "Provision self-managed worker nodes (CFN ASG + bootstrap.sh). Mirrors the KodeKloud course workflow; avoids eks:CreateNodegroup which the lab blocks."
 }

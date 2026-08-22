@@ -77,13 +77,21 @@ Always tear down what you deploy to avoid hitting caps / charges:
 
 ## 7. Notes
 - EKS/ECS assume the playground-provided `eksClusterRole` / `AmazonEKSNodeRole`.
-- The EKS cluster runs **Kubernetes 1.36** and grants the lab IAM role
-  (`kk-lab-lab-role`, created by the `iam-vpc` module) cluster-admin via an EKS
-  access entry, so the bastion host can manage it with `kubectl`.
-- Because the EKS module now looks up the `kk-lab-lab-role` (from `iam-vpc`),
-  **deploy EKS after IAM/VPC** — `./tf.sh group-core apply` already does this in
-  order (`iam-vpc … eks … bastion`). A standalone `./tf.sh eks apply` requires the
-  `iam-vpc` service to have been applied first.
+- The EKS cluster runs **Kubernetes 1.36** and deploys **self-managed worker
+  nodes** (an AutoScalingGroup launched from a bootstrap.sh-enabled launch
+  template, driven by a CloudFormation stack). The playground blocks
+  `eks:CreateNodegroup`, so this avoids the managed node group API while still
+  giving you a real, schedulable cluster.
+- Worker nodes use the course IAM role `eksWorkerNodeRole` (the playground only
+  permits `iam:PassRole` on course roles) and are joined to the cluster via the
+  `aws-auth` ConfigMap (`system:bootstrappers` / `system:nodes`), applied
+  automatically by the module.
+- The bastion host reuses the worker node IAM role, so `kubectl get nodes` works
+  from it without any extra access entries.
+- Deploy **eks before bastion** — `./tf.sh group-core apply` already orders them
+  that way (`… eks … bastion`). A standalone `./tf.sh bastion apply` requires the
+  `eks` service to have been applied first (the node role/instance profile must
+  exist).
 - Some services (e.g. `directory-service`, `redshift-serverless`) provision billable
   resources; destroy promptly after practicing.
 - See `docs/CONSOLE_ONLY.md` for services that have no Terraform module.

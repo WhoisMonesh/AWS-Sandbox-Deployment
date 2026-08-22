@@ -1,8 +1,5 @@
 locals {
-  vpc_name                = var.vpc_name == "" ? "${var.name_prefix}-vpc" : var.vpc_name
-  public_subnet_name      = var.public_subnet_name == "" ? "${var.name_prefix}-public-subnet" : var.public_subnet_name
-  lab_instance_profile    = var.lab_instance_profile_name == "" ? "${var.name_prefix}-lab-profile" : var.lab_instance_profile_name
-  key_name                = var.key_name == "" ? "${var.name_prefix}-bastion-key" : var.key_name
+  key_name = var.key_name == "" ? "${var.name_prefix}-bastion-key" : var.key_name
   user_data_template_vars = {
     kubectl_version = var.kubectl_version
     region          = var.region
@@ -10,23 +7,31 @@ locals {
   }
 }
 
-# ----- Look up the lab VPC / subnet / instance profile created by the iam-vpc module -----
-data "aws_vpc" "lab" {
+# ----- Look up the DEFAULT VPC / subnet the EKS node group lives in -----
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
   filter {
-    name   = "tag:Name"
-    values = [local.vpc_name]
+    name   = "default-for-az"
+    values = ["true"]
   }
 }
 
-data "aws_subnet" "public" {
-  filter {
-    name   = "tag:Name"
-    values = [local.public_subnet_name]
-  }
+# Resolve per-subnet AZ so we can drop unsupported ones (e.g. us-east-1e).
+data "aws_subnet" "default_selected" {
+  count = length(data.aws_subnets.default.ids)
+  id    = data.aws_subnets.default.ids[count.index]
 }
 
-data "aws_iam_instance_profile" "lab" {
-  name = local.lab_instance_profile
+locals {
+  # EKS / t3 instances are not supported in us-east-1e.
+  supported_subnet_ids = [
+    for s in data.aws_subnet.default_selected : s.id
+    if s.availability_zone != "us-east-1e"
+  ]
+  subnet_id = length(local.supported_subnet_ids) > 0 ? local.supported_subnet_ids[0] : data.aws_subnets.default.ids[0]
 }
 
 data "aws_ami" "al2023" {
@@ -42,6 +47,17 @@ data "aws_ami" "al2023" {
     name   = "architecture"
     values = ["x86_64"]
   }
+}
+
+# The bastion reuses the worker node IAM role / instance profile created by the
+# eks module. The node role is mapped to system:nodes in the cluster aws-auth
+# ConfigMap, so kubectl works from the bastion.
+data "aws_iam_instance_profile" "node" {
+  name = var.node_instance_profile_name
+}
+
+data "aws_iam_role" "node" {
+  name = var.node_role_name
 }
 
 # ----- SSH key pair (RSA) -----
@@ -72,7 +88,7 @@ resource "local_file" "private_key" {
 resource "aws_security_group" "bastion" {
   name        = "${var.name_prefix}-bastion-sg"
   description = "SSH access to the KodeKloud EKS bastion host"
-  vpc_id      = data.aws_vpc.lab.id
+  vpc_id      = data.aws_vpc.default.id
 
   ingress {
     description = "SSH"
@@ -95,36 +111,37 @@ resource "aws_security_group" "bastion" {
   }
 }
 
-# ----- Grant the lab role the AWS-side EKS API perms the bastion needs -----
-# (The EKS access entry covers Kubernetes RBAC; this covers the AWS API calls
-#  like eks:DescribeCluster / eks:GetToken used by update-kubeconfig + kubectl.)
-data "aws_iam_policy_document" "eks_api" {
+# ----- Grant the node role the AWS-side EKS API perms the bastion needs -----
+# The aws-auth ConfigMap grants Kubernetes RBAC (system:nodes); this inline
+# policy covers the AWS API calls eks:DescribeCluster / eks:GetToken used by
+# `aws eks update-kubeconfig` + the kubectl exec credential plugin.
+data "aws_iam_policy_document" "jump" {
   statement {
     actions = [
       "eks:DescribeCluster",
       "eks:ListClusters",
       "eks:GetToken",
-      "eks:DescribeClusterVersions",
+      "sts:GetCallerIdentity",
     ]
     resources = ["*"]
   }
 }
 
-resource "aws_iam_role_policy" "eks_api" {
-  count = var.grant_eks_api_permissions ? 1 : 0
+resource "aws_iam_role_policy" "jump" {
+  count = var.attach_jump_policy ? 1 : 0
 
-  name = "${var.name_prefix}-bastion-eks-api"
-  role = data.aws_iam_instance_profile.lab.role_name
-  policy = data.aws_iam_policy_document.eks_api.json
+  name = "${var.name_prefix}-bastion-jump"
+  role = data.aws_iam_role.node.name
+  policy = data.aws_iam_policy_document.jump.json
 }
 
 # ----- Bastion instance -----
 resource "aws_instance" "bastion" {
   ami                         = data.aws_ami.al2023.id
   instance_type               = var.instance_type
-  subnet_id                   = data.aws_subnet.public.id
+  subnet_id                   = local.subnet_id
   vpc_security_group_ids      = [aws_security_group.bastion.id]
-  iam_instance_profile        = data.aws_iam_instance_profile.lab.name
+  iam_instance_profile        = data.aws_iam_instance_profile.node.name
   associate_public_ip_address = true
   key_name                    = aws_key_pair.this.key_name
 

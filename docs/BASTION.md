@@ -83,35 +83,43 @@ EKS access entry may still be propagating — wait ~30s and re-run `connect-eks.
 
 The KodeKloud Playground `AWS_EKSECSWithConditions` policy is restrictive:
 
-- **Access entry creation** — the EKS module creates an
-  `aws_eks_access_entry` + `AmazonEKSClusterAdminPolicy` association for the lab
-  role. If the lab policy blocks `eks:CreateAccessEntry`, the `eks` apply fails at
-  that step. Disable it with:
+- **No managed node groups / Fargate** — `eks:CreateNodegroup` and the Fargate
+  prerequisites are not permitted. The EKS module therefore deploys **self-managed
+  worker nodes** via a CloudFormation AutoScalingGroup + `bootstrap.sh` (the same
+  pattern the KodeKloud EKS course uses). This is allowed by the lab.
 
-  ```hcl
-  module "eks" {
-    source             = "../../modules/container/eks"
-    create_access_entry = false
-  }
-  ```
-  and instead manage `aws-auth` manually (note: applying `aws-auth` itself needs
-  existing cluster access).
+- **Worker node role must be a course role** — the playground only permits
+  `iam:PassRole` on the course roles (`eksClusterRole`, `eksWorkerNodeRole`). The
+  module uses those exact names; do not rename them.
 
-- **EKS API permissions for the bastion** — the EKS access entry grants
-  Kubernetes RBAC only. To actually call `aws eks update-kubeconfig` and the
-  kubectl exec plugin, the bastion's instance profile (the lab role) also needs
-  the AWS-side `eks:DescribeCluster` / `eks:GetToken` permissions. The bastion
-  module attaches a small inline policy for this. If the lab policy blocks
-  `iam:PutRolePolicy` on the lab role, disable it:
+- **Bastion reuses the node role** — the bastion instance profile is the worker
+  node role (`eksWorkerNodeRole`), which the `aws-auth` ConfigMap maps to
+  `system:nodes`. That is enough for `kubectl get nodes`, `logs`, `exec`, etc. For
+  full cluster-admin operations, use your local `aws eks update-kubeconfig`
+  (the cluster creator gets admin via `bootstrap_cluster_creator_admin_permissions`).
+
+- **EKS API permissions for the bastion** — to run `aws eks update-kubeconfig`
+  and the kubectl exec plugin, the node role needs `eks:DescribeCluster` /
+  `eks:GetToken` / `sts:GetCallerIdentity`. The bastion module attaches a small
+  inline policy for this. If the lab policy blocks `iam:PutRolePolicy` on the
+  course role, disable it:
 
   ```hcl
   module "bastion" {
-    source                  = "../../modules/compute/bastion"
-    grant_eks_api_permissions = false
+    source           = "../../modules/compute/bastion"
+    attach_jump_policy = false
   }
   ```
-  and attach the EKS perms to the lab role another way (or run `update-kubeconfig`
-  from a principal that already has them).
+  and grant those permissions to the node role another way (or run
+  `update-kubeconfig` from a principal that already has them).
+
+- **Public endpoint only** — the cluster uses `endpoint_public_access = true`, so
+  the bastion reaches the API server over the internet (it sits in a public subnet
+  with an IGW route). No VPC peering / private-link is required for `kubectl`.
+
+- **SSH exposure** — the bastion security group allows TCP/22 from
+  `0.0.0.0/0` by default (`ssh_cidr` variable). For anything beyond the lab,
+  narrow this to your IP/CIDR.
 
 - **No managed node groups / Fargate** — `eks:CreateNodegroup` and the Fargate
   prerequisites (`iam:PassRole` to `eks-fargate-pods.amazonaws.com`,
