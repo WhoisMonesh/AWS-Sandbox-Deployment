@@ -13,6 +13,22 @@ function Info($m) { Write-Host "==> $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "OK  $m" -ForegroundColor Green }
 function Warn($m){ Write-Host "!!  $m" -ForegroundColor Yellow }
 
+# Windows PowerShell 5.1 turns every native-command stderr line into an
+# ErrorRecord, which is fatal when $ErrorActionPreference is "Stop".
+# aws prints benign notes on stderr (e.g. `configure unset` on missing keys),
+# so every aws invocation must go through this wrapper.
+function Invoke-Aws {
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    & aws @args 2>&1 | ForEach-Object {
+      if ($_ -is [System.Management.Automation.ErrorRecord]) { [string]$_.TargetObject } else { [string]$_ }
+    }
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+}
+
 if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
   Write-Host "aws CLI not found. Install it first: winget install Amazon.AWSCLI" -ForegroundColor Red
   exit 1
@@ -41,19 +57,16 @@ $iamArn = "arn:aws:iam::${accountId}:user/${iamUser}"
 # ---------------- Attempt 1: aws login ----------------
 function Try-AwsLogin {
   Info "Attempting 'aws login' (browser-based console credentials)..."
-  try {
-    & aws login --profile $LOGIN_PROFILE --region $region 2>&1
-    if ($LASTEXITCODE -eq 0) {
-      Ok "aws login succeeded."
-      & aws configure set "profile.$PROFILE.region" $region
-      & aws configure set "profile.$PROFILE.credential_process" "aws configure export-credentials --profile $LOGIN_PROFILE --format process"
-      & aws configure set "profile.$LOGIN_PROFILE.region" $region
-      & aws configure set "profile.$LOGIN_PROFILE.login_session" $iamArn
-      return $true
-    }
-  } catch {
-    Warn "aws login failed."
+  Invoke-Aws login --profile $LOGIN_PROFILE --region $region
+  if ($LASTEXITCODE -eq 0) {
+    Ok "aws login succeeded."
+    Invoke-Aws configure set "profile.$PROFILE.region" $region
+    Invoke-Aws configure set "profile.$PROFILE.credential_process" "aws configure export-credentials --profile $LOGIN_PROFILE --format process"
+    Invoke-Aws configure set "profile.$LOGIN_PROFILE.region" $region
+    Invoke-Aws configure set "profile.$LOGIN_PROFILE.login_session" $iamArn
+    return $true
   }
+  Warn "'aws login' failed (exit code $LASTEXITCODE)."
   return $false
 }
 
@@ -68,10 +81,9 @@ function Use-AccessKeys {
   Start-Process $consoleUrl
   $ak = Read-Host "Access Key ID"
   $sk = Read-Host "Secret Access Key"
-  & aws configure unset "profile.$PROFILE.credential_process" 2>$null
-  & aws configure set "profile.$PROFILE.region" $region
-  & aws configure set "profile.$PROFILE.aws_access_key_id" $ak
-  & aws configure set "profile.$PROFILE.aws_secret_access_key" $sk
+  Invoke-Aws configure set "profile.$PROFILE.region" $region
+  Invoke-Aws configure set "profile.$PROFILE.aws_access_key_id" $ak
+  Invoke-Aws configure set "profile.$PROFILE.aws_secret_access_key" $sk
   Ok "Stored access keys in profile '$PROFILE'."
 }
 
@@ -79,10 +91,28 @@ function Use-AccessKeys {
 # Re-running this script must start from a clean slate so stale access keys or
 # an old credential_process never linger alongside the new credentials.
 function Clear-OldCreds {
-  foreach ($p in @($PROFILE, $LOGIN_PROFILE)) {
-    & aws configure unset "profile.$p.aws_access_key_id" 2>$null
-    & aws configure unset "profile.$p.aws_secret_access_key" 2>$null
-    & aws configure unset "profile.$p.credential_process" 2>$null
+  $credKeys = "^\s*(aws_access_key_id|aws_secret_access_key|credential_process)\s*="
+  $config = Join-Path $env:USERPROFILE ".aws\config"
+  if (Test-Path $config) {
+    $names = @("profile $PROFILE", "profile $LOGIN_PROFILE")
+    $inTarget = $false
+    $new = foreach ($line in (Get-Content $config)) {
+      if ($line -match "^\s*\[(.+)\]\s*$") { $inTarget = ($names -contains $Matches[1].Trim()) }
+      elseif ($inTarget -and $line -match $credKeys) { continue }
+      $line
+    }
+    Set-Content -Path $config -Value $new -Encoding ASCII
+  }
+  $credsFile = Join-Path $env:USERPROFILE ".aws\credentials"
+  if (Test-Path $credsFile) {
+    $names = @($PROFILE, $LOGIN_PROFILE)
+    $inTarget = $false
+    $new = foreach ($line in (Get-Content $credsFile)) {
+      if ($line -match "^\s*\[(.+)\]\s*$") { $inTarget = ($names -contains $Matches[1].Trim()) }
+      elseif ($inTarget -and $line -match $credKeys) { continue }
+      $line
+    }
+    Set-Content -Path $credsFile -Value $new -Encoding ASCII
   }
 }
 Clear-OldCreds
@@ -101,7 +131,7 @@ if ($auth -eq "1") {
 
 # ---------------- Verify ----------------
 Info "Verifying identity with 'aws sts get-caller-identity --profile $PROFILE'..."
-& aws sts get-caller-identity --profile $PROFILE --region $region
+Invoke-Aws sts get-caller-identity --profile $PROFILE --region $region
 if ($LASTEXITCODE -eq 0) {
   Ok "Credentials work. You can now run:  .\tf.ps1 <service> plan"
 } else {

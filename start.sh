@@ -36,24 +36,47 @@ install_mac() {
   fi
 }
 
+install_arch() {
+  sudo pacman -Sy --needed --noconfirm aws-cli terraform jq git unzip
+}
+
+install_rhel() {
+  local pkg
+  pkg="$(command -v dnf || command -v yum)"
+  sudo "$pkg" install -y jq git unzip curl || true
+  warn "Install AWS CLI v2 manually: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+  warn "Install Terraform manually: https://developer.hashicorp.com/terraform/install"
+}
+
 install_linux() {
-  sudo apt-get update -y
-  sudo apt-get install -y jq git unzip curl gnupg software-properties-common ca-certificates
-
-  if ! command -v aws >/dev/null 2>&1 || [[ "$(aws --version 2>/dev/null)" != aws-cli/2* ]]; then
-    info "Installing AWS CLI v2..."
-    curl -sSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
-    unzip -o /tmp/awscliv2.zip -d /tmp/awscli >/dev/null 2>&1 || true
-    sudo /tmp/awscli/aws/install || true
-  fi
-
-  if ! command -v terraform >/dev/null 2>&1; then
-    info "Installing Terraform..."
-    wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
-      | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+  if command -v apt-get >/dev/null 2>&1; then
+    info "Detected Debian/Ubuntu."
     sudo apt-get update -y
-    sudo apt-get install -y terraform
+    sudo apt-get install -y jq git unzip curl gnupg software-properties-common ca-certificates
+
+    if ! command -v aws >/dev/null 2>&1 || [[ "$(aws --version 2>/dev/null)" != aws-cli/2* ]]; then
+      info "Installing AWS CLI v2..."
+      curl -sSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscliv2.zip
+      unzip -o /tmp/awscliv2.zip -d /tmp/awscli >/dev/null 2>&1 || true
+      sudo /tmp/awscli/aws/install || true
+    fi
+
+    if ! command -v terraform >/dev/null 2>&1; then
+      info "Installing Terraform..."
+      wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
+        | sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+      sudo apt-get update -y
+      sudo apt-get install -y terraform
+    fi
+  elif command -v pacman >/dev/null 2>&1; then
+    info "Detected Arch Linux."
+    install_arch
+  elif command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+    info "Detected RHEL family."
+    install_rhel
+  else
+    warn "Unsupported distro. Install aws-cli, terraform, jq, git, unzip manually."
   fi
 }
 
@@ -65,9 +88,9 @@ detect_and_install() {
     install_mac
   elif [[ "$os" == "Linux" ]]; then
     if grep -qi microsoft /proc/version 2>/dev/null; then
-      info "Detected WSL (Ubuntu)."
+      info "Detected WSL."
     else
-      info "Detected Linux (Ubuntu)."
+      info "Detected Linux."
     fi
     install_linux
   else

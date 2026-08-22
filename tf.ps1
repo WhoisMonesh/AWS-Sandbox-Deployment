@@ -43,7 +43,7 @@ function Resolve-Targets($t) {
   return @("UNKNOWN:$t")
 }
 
-$TARGETS = Resolve-Targets $TARGET
+$TARGETS = @(Resolve-Targets $TARGET)
 
 if ($TARGETS[0] -like "UNKNOWN:*") {
   Write-Host "Unknown target: $TARGET" -ForegroundColor Red
@@ -61,11 +61,16 @@ foreach ($svc in $TARGETS) {
   Write-Host "  terraform $ACTION  ->  services/$svc" -ForegroundColor Cyan
   Write-Host "======================================================" -ForegroundColor Cyan
   Set-Location $dir
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
   try {
     & terraform init -input=false
-    & terraform $ACTION @EXTRA
+    if ($LASTEXITCODE -eq 0) {
+      & terraform $ACTION @EXTRA
+    }
     if ($LASTEXITCODE -ne 0) { Write-Host "!! Failed: services/$svc" -ForegroundColor Red; $exitCode = 1 }
   } finally {
+    $ErrorActionPreference = $prev
     Set-Location $Root
   }
 }

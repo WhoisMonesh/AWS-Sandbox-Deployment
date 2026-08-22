@@ -20,7 +20,7 @@ function Warn($m){ Write-Host "!!  $m" -ForegroundColor Yellow }
 
 # ---------------- Prerequisite installation ----------------
 function Install-Prereqs {
-  $needed = @{
+  $needed = [ordered]@{
     "Amazon.AWSCLI"        = "aws"
     "HashiCorp.Terraform"  = "terraform"
     "jqlang.jq"            = "jq"
@@ -30,25 +30,39 @@ function Install-Prereqs {
     $cmd = $needed[$id]
     if (Get-Command $cmd -ErrorAction SilentlyContinue) {
       Ok "$cmd already installed"
-    } else {
-      Info "Installing $id via winget..."
-      if (Get-Command winget -ErrorAction SilentlyContinue) {
-        winget install --id $id --accept-package-agreements --accept-source-agreements -e
-      } else {
-        Warn "winget not found. Please install $id manually from https://developer.hashicorp.com/terraform/downloads and https://aws.amazon.com/cli/"
-      }
+      continue
     }
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+      Warn "winget not found. Please install '$cmd' manually (terraform: https://developer.hashicorp.com/terraform/downloads)."
+      continue
+    }
+    Info "Installing $id via winget..."
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+      & winget install --id $id -e --accept-package-agreements --accept-source-agreements 2>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) { [string]$_.TargetObject } else { [string]$_ }
+      }
+      if ($LASTEXITCODE -ne 0) { Warn "winget could not install $id (exit code $LASTEXITCODE); install '$cmd' manually if needed." }
+    } finally {
+      $ErrorActionPreference = $prev
+    }
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    if (Get-Command $cmd -ErrorAction SilentlyContinue) { Ok "$cmd installed" }
+    else { Warn "$cmd still not on PATH after winget; open a new terminal or install it manually." }
   }
-  # Refresh PATH for this session
-  $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 }
 
 Install-Prereqs
 
 Info "Verifying prerequisites:"
 foreach ($c in @("aws", "terraform", "jq", "git")) {
-  if (Get-Command $c -ErrorAction SilentlyContinue) { Ok "$c -> $(& $c --version 2>&1 | Select-Object -First 1)" }
-  else { Warn "$c is missing" }
+  if (Get-Command $c -ErrorAction SilentlyContinue) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try { $v = (& $c --version 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { [string]$_.TargetObject } else { [string]$_ } } | Select-Object -First 1) } finally { $ErrorActionPreference = $prev }
+    Ok "$c -> $v"
+  } else { Warn "$c is missing" }
 }
 
 # ---------------- Credential bootstrap ----------------
@@ -65,7 +79,7 @@ function Deploy-Menu {
     Write-Host ""
     Write-Host "Available services: $((Get-ChildItem services -Directory).Name -join ' ')"
     Write-Host "Groups: group-core group-storage group-database group-network group-integration group-security group-monitor group-devtools group-tools"
-    $tgt = Read-Host "Deploy target (service / group / 'all' / q to quit)"
+    $tgt = Read-Host "Deploy target (e.g. s3, eks, group-core, 'all', q to quit)"
     if ($tgt -eq "q" -or $tgt -eq "") { Write-Host "Bye."; break }
     $act = Read-Host "Action [plan|apply|destroy] (default plan)"
     if ($act -eq "") { $act = "plan" }
