@@ -21,8 +21,19 @@ data "aws_subnets" "default" {
   }
 }
 
+# Resolve per-subnet AZ so we can drop unsupported ones (e.g. us-east-1e).
+data "aws_subnet" "default_selected" {
+  count = var.subnet_id == "" ? length(data.aws_subnets.default[0].ids) : 0
+  id    = data.aws_subnets.default[0].ids[count.index]
+}
+
 locals {
-  subnet_id = var.subnet_id != "" ? var.subnet_id : data.aws_subnets.default[0].ids[0]
+  # EKS control plane (and t3/t2 instances) are not supported in us-east-1e.
+  supported_subnet_ids = var.subnet_id != "" ? [var.subnet_id] : [
+    for s in data.aws_subnet.default_selected : s.id
+    if s.availability_zone != "us-east-1e"
+  ]
+  subnet_id = length(local.supported_subnet_ids) > 0 ? local.supported_subnet_ids[0] : var.subnet_id
   name      = "${var.name_prefix}-ec2"
 }
 
