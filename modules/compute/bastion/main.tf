@@ -135,12 +135,21 @@ data "aws_iam_policy_document" "jump" {
   }
 }
 
-resource "aws_iam_role_policy" "jump" {
+# Use a managed policy + attachment (iam:AttachRolePolicy) instead of an inline
+# policy (iam:PutRolePolicy), which the sandbox IAM user is not permitted to do.
+resource "aws_iam_policy" "jump" {
   count = var.attach_jump_policy ? 1 : 0
 
-  name = "${var.name_prefix}-bastion-jump"
-  role = data.aws_iam_role.node.name
-  policy = data.aws_iam_policy_document.jump.json
+  name        = "${var.name_prefix}-bastion-jump"
+  description = "EKS API perms for bastion kubectl/eksctl usage"
+  policy      = data.aws_iam_policy_document.jump.json
+}
+
+resource "aws_iam_role_policy_attachment" "jump" {
+  count = var.attach_jump_policy ? 1 : 0
+
+  role       = data.aws_iam_role.node.name
+  policy_arn = aws_iam_policy.jump[0].arn
 }
 
 # ----- Bastion instance -----
@@ -162,7 +171,7 @@ resource "aws_instance" "bastion" {
 
   root_block_device {
     volume_type           = "gp2"
-    volume_size           = 20
+    volume_size           = 30
     encrypted             = true
     delete_on_termination = true
   }
