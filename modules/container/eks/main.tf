@@ -331,12 +331,12 @@ resource "aws_cloudformation_stack" "node" {
             LaunchTemplateId = aws_launch_template.node[0].id
             Version          = aws_launch_template.node[0].latest_version
           }
-          UpdatePolicy = {
-            AutoScalingRollingUpdate = {
-              MaxBatchSize            = 1
-              MinInstancesInService   = var.node_desired
-              PauseTime               = "PT5M"
-            }
+        }
+        UpdatePolicy = {
+          AutoScalingRollingUpdate = {
+            MaxBatchSize            = 1
+            MinInstancesInService   = var.node_desired
+            PauseTime               = "PT5M"
           }
         }
       }
@@ -349,7 +349,7 @@ resource "aws_cloudformation_stack" "node" {
     }
   })
 
-  depends_on = [time_sleep.node_lt]
+  depends_on = [time_sleep.node_lt, kubernetes_config_map.aws_auth]
 }
 
 # ---------------------------------------------------------------------------
@@ -369,9 +369,9 @@ provider "kubernetes" {
   token                  = data.aws_eks_cluster_auth.this.token
 }
 
-# Upsert (rather than create) so we don't collide with the aws-auth ConfigMap
-# EKS auto-provisions on cluster creation.
-resource "kubernetes_config_map_v1_data" "aws_auth" {
+# In API_AND_CONFIG_MAP auth mode EKS does NOT auto-provision the aws-auth
+# ConfigMap, so we create it here and map the node IAM role.
+resource "kubernetes_config_map" "aws_auth" {
   count      = var.create_node_group ? 1 : 0
   depends_on = [aws_eks_cluster.this]
 
