@@ -8,12 +8,6 @@ if "%~1"=="" goto usage
 set "TARGET=%~1"
 set "ACTION=%~2"
 if not defined ACTION set "ACTION=plan"
-echo %ACTION%| findstr /r "^plan$ ^apply$ ^destroy$ ^init$ ^validate$ ^output$" >nul || (
-    echo Invalid action: %ACTION%
-    echo Valid actions: plan apply destroy init validate output
-    echo Hint: quote comma lists, e.g. tf.bat "eks,bastion" plan
-    exit /b 1
-)
 shift
 shift
 set "EXTRA="
@@ -23,6 +17,35 @@ set "EXTRA=%EXTRA% %~1"
 shift
 goto collect
 :collected
+
+rem cmd splits commas/spaces into separate args, so `tf.bat eks,bastion apply`
+rem arrives as eks | bastion | apply. If ACTION is not a terraform command,
+rem rebuild the target list by walking the extra args until one shows up.
+echo %ACTION%| findstr /r "^plan$ ^apply$ ^destroy$ ^init$ ^validate$ ^output$" >nul && goto action_ok
+if not defined EXTRA goto bad_action
+set "TARGET=%TARGET%,%ACTION%"
+set /a RECOVER_GUARD=0
+:try_recover
+set /a RECOVER_GUARD+=1
+if %RECOVER_GUARD% gtr 10 goto bad_action
+for /f "tokens=1,* delims= " %%A in ("%EXTRA%") do (
+    echo %%A| findstr /r "^plan$ ^apply$ ^destroy$ ^init$ ^validate$ ^output$" >nul && (
+        set "ACTION=%%A"
+        set "EXTRA= %%B"
+        goto action_ok
+    )
+    set "TARGET=!TARGET!,%%A"
+    set "EXTRA= %%B"
+)
+goto try_recover
+
+:bad_action
+echo Invalid action: %ACTION%
+echo Valid actions: plan apply destroy init validate output
+echo Example: tf.bat "eks,bastion" apply   ^(or unquoted: tf.bat eks,bastion apply^)
+exit /b 1
+
+:action_ok
 
 set "TARGET=%TARGET:,= %"
 set "TARGETS="
@@ -103,7 +126,9 @@ echo.
 echo ======================================================
 echo   terraform %ACTION%  -^>  services/%~1
 echo ======================================================
-terraform init -input=false
+rem Always `call terraform` - if terraform resolves to a .bat wrapper,
+rem chaining without call would break this script's control flow.
+call terraform init -input=false
 if errorlevel 1 (
     echo !! Failed init: services/%~1
     set RC=1
@@ -112,7 +137,7 @@ if errorlevel 1 (
 )
 if /i "%ACTION%"=="apply" call :AutoApprove
 if /i "%ACTION%"=="destroy" call :AutoApprove
-terraform %ACTION%%EXTRA%
+call terraform %ACTION%%EXTRA%
 if errorlevel 1 (
     echo !! Failed: services/%~1
     set RC=1

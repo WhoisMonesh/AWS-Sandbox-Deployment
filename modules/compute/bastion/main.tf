@@ -167,7 +167,8 @@ resource "aws_instance" "bastion" {
     cpu_credits = "standard"
   }
 
-  user_data = base64encode(templatefile("${path.module}/user_data.sh.tpl", local.user_data_template_vars))
+  # user_data_base64 avoids the provider warning about pre-encoded values.
+  user_data_base64 = base64encode(templatefile("${path.module}/user_data.sh.tpl", local.user_data_template_vars))
 
   root_block_device {
     volume_type           = "gp2"

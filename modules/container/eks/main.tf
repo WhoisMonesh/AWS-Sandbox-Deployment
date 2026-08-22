@@ -298,7 +298,8 @@ resource "aws_launch_template" "node" {
 
   # AL2023-based EKS AMIs removed bootstrap.sh; nodes are now initialized by
   # nodeadm. Write a NodeConfig and run `nodeadm init` with the cluster details.
-  user_data = base64encode(<<-EOT
+  # user_data_base64 avoids the provider warning about pre-encoded values.
+  user_data_base64 = base64encode(<<-EOT
     #!/bin/bash
     set -o xtrace
     cat > /etc/eks/bootstrap.json <<'BOOTSTRAP'
@@ -386,7 +387,7 @@ provider "kubernetes" {
 
 # In API_AND_CONFIG_MAP auth mode EKS does NOT auto-provision the aws-auth
 # ConfigMap, so we create it here and map the node IAM role.
-resource "kubernetes_config_map" "aws_auth" {
+resource "kubernetes_config_map_v1" "aws_auth" {
   count      = var.create_node_group ? 1 : 0
   depends_on = [aws_eks_cluster.this]
 
