@@ -31,6 +31,14 @@ resource "aws_elastic_beanstalk_environment" "this" {
     value     = "SingleInstance"
   }
 
+  # Pin the size so EB defaults can't drift outside the sandbox's
+  # t2/t3 nano|micro|small|medium allow-list.
+  setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "InstanceType"
+    value     = var.instance_type
+  }
+
   tags = {
     Lab = "kodekloud"
   }

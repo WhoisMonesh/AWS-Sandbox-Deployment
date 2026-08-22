@@ -35,6 +35,16 @@ variable "solution_stack_name" {
   default = "64bit Amazon Linux 2023 v4.0.1 running Python 3.11"
 }
 
+variable "instance_type" {
+  type    = string
+  default = "t3.small"
+
+  validation {
+    condition     = can(regex("^t[23]\\.(nano|micro|small|medium)$", var.instance_type))
+    error_message = "Sandbox: allowed instance types are t2/t3 nano|micro|small|medium."
+  }
+}
+
 variable "cname_prefix" {
   type    = string
   default = "kk-beanstalk"

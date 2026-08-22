@@ -45,9 +45,12 @@ resource "aws_launch_template" "this" {
 }
 
 resource "aws_autoscaling_group" "this" {
-  name                = "${var.name_prefix}-asg"
-  min_size            = 1
-  max_size            = 3
+  name     = "${var.name_prefix}-asg"
+  min_size = 1
+  # KodeKloud caps: 5 total EC2 instances and 10 vCPU account-wide. With the
+  # EKS node group (2x t3.micro) + bastion (t3.micro) already running, an ASG
+  # scale-out beyond 1 extra instance breaches both. Keep max at 2.
+  max_size            = 2
   desired_capacity    = 1
   vpc_zone_identifier = data.aws_subnets.default.ids
 
